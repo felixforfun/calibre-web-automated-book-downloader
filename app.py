@@ -2,6 +2,7 @@
 
 import logging
 import io, re, os
+import asyncio
 from flask import Flask, request, jsonify, render_template, send_file, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.wrappers import Response 
@@ -10,8 +11,9 @@ import typing
 
 from logger import setup_logger
 from config import _SUPPORTED_BOOK_LANGUAGE, BOOK_LANGUAGE
-from env import FLASK_HOST, FLASK_PORT, APP_ENV, DEBUG
+from env import FLASK_HOST, FLASK_PORT, APP_ENV, DEBUG, ENABLE_TOLINO
 import backend
+import tolino_uploader
 
 from models import SearchFilters
 
@@ -257,6 +259,116 @@ def api_local_download() -> Union[Response, Tuple[Response, int]]:
 
     except Exception as e:
         logger.error_trace(f"Local download error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/tolino/upload', methods=['GET'])
+def api_tolino_upload() -> Union[Response, Tuple[Response, int]]:
+    """
+    Upload a book to Tolino cloud.
+
+    Query Parameters:
+        id (str): Book identifier (MD5 hash)
+
+    Returns:
+        flask.Response: JSON status object indicating success or failure.
+    """
+    if not ENABLE_TOLINO:
+        return jsonify({"error": "Tolino functionality is disabled"}), 400
+        
+    book_id = request.args.get('id', '')
+    if not book_id:
+        return jsonify({"error": "No book ID provided"}), 400
+
+    try:
+        # First check if we have credentials
+        if not tolino_uploader.has_tolino_credentials():
+            return jsonify({"error": "Tolino credentials not set. Please set them first."}), 400
+            
+        # Check if the book is available
+        book_info = backend.get_book_info(book_id)
+        if not book_info or not book_info.get('download_path'):
+            # If not available, queue it for download first with Tolino upload flag
+            success = backend.queue_book(book_id, upload_to_tolino=True)
+            if not success:
+                return jsonify({"error": "Failed to queue book for download"}), 500
+            return jsonify({"status": "queued", "message": "Book queued for download. Upload to Tolino will start after download completes."})
+            
+        # Book is available, upload it to Tolino
+        book_path = book_info.get('download_path')
+        
+        # Run the upload in a background task
+        def run_async_upload():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(tolino_uploader.upload_book_to_tolino(book_path))
+            loop.close()
+            return result
+            
+        # Start upload in a separate thread to not block the request
+        import threading
+        upload_thread = threading.Thread(target=run_async_upload)
+        upload_thread.daemon = True
+        upload_thread.start()
+        
+        return jsonify({"status": "uploading", "message": "Book upload to Tolino started"})
+    except Exception as e:
+        logger.error_trace(f"Tolino upload error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/tolino/credentials', methods=['POST'])
+def api_tolino_credentials() -> Union[Response, Tuple[Response, int]]:
+    """
+    Set Tolino credentials.
+
+    Request Body:
+        username (str): Tolino account username/email
+        password (str): Tolino account password
+
+    Returns:
+        flask.Response: JSON status object indicating success or failure.
+    """
+    if not ENABLE_TOLINO:
+        return jsonify({"error": "Tolino functionality is disabled"}), 400
+        
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No data provided"}), 400
+            
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({"error": "Username and password are required"}), 400
+            
+        success = tolino_uploader.save_tolino_credentials(username, password)
+        if success:
+            return jsonify({"status": "success", "message": "Tolino credentials saved"})
+        else:
+            return jsonify({"error": "Failed to save Tolino credentials"}), 500
+    except Exception as e:
+        logger.error_trace(f"Tolino credentials error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/tolino/status', methods=['GET'])
+def api_tolino_status() -> Union[Response, Tuple[Response, int]]:
+    """
+    Check if Tolino credentials are set.
+
+    Returns:
+        flask.Response: JSON status object indicating if credentials are available.
+    """
+    if not ENABLE_TOLINO:
+        return jsonify({"enabled": False})
+        
+    try:
+        has_credentials = tolino_uploader.has_tolino_credentials()
+        return jsonify({
+            "enabled": True,
+            "has_credentials": has_credentials
+        })
+    except Exception as e:
+        logger.error_trace(f"Tolino status error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.errorhandler(404)

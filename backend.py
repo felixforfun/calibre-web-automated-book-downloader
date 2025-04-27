@@ -9,9 +9,11 @@ import os
 
 from logger import setup_logger
 from config import CUSTOM_SCRIPT
-from env import INGEST_DIR, TMP_DIR, MAIN_LOOP_SLEEP_TIME, USE_BOOK_TITLE
+from env import INGEST_DIR, TMP_DIR, MAIN_LOOP_SLEEP_TIME, USE_BOOK_TITLE, ENABLE_TOLINO
 from models import book_queue, BookInfo, QueueStatus, SearchFilters
 import book_manager
+import asyncio
+import tolino_uploader
 
 logger = setup_logger(__name__)
 
@@ -53,19 +55,25 @@ def get_book_info(book_id: str) -> Optional[Dict[str, Any]]:
         logger.error_trace(f"Error getting book info: {e}")
         return None
 
-def queue_book(book_id: str) -> bool:
+def queue_book(book_id: str, upload_to_tolino: bool = False) -> bool:
     """Add a book to the download queue.
     
     Args:
         book_id: Book identifier
+        upload_to_tolino: Whether to upload the book to Tolino after download
         
     Returns:
         bool: True if book was successfully queued
     """
     try:
         book_info = book_manager.get_book_info(book_id)
+        
+        # Set flag for Tolino upload if requested
+        if upload_to_tolino:
+            book_info.upload_to_tolino = True
+            
         book_queue.add(book_id, book_info)
-        logger.info(f"Book queued: {book_info.title}")
+        logger.info(f"Book queued: {book_info.title}" + (" (with Tolino upload)" if upload_to_tolino else ""))
         return True
     except Exception as e:
         logger.error_trace(f"Error queueing book: {e}")
@@ -170,6 +178,31 @@ def download_loop() -> None:
             download_path = _download_book(book_id)
             if download_path:
                 book_queue.update_download_path(book_id, download_path)
+                
+                # Check if this book is flagged for Tolino upload
+                book_info = book_queue._book_data.get(book_id)
+                if book_info and getattr(book_info, 'upload_to_tolino', False) and ENABLE_TOLINO:
+                    logger.info(f"Book {book_id} flagged for Tolino upload")
+                    
+                    # Run the upload in a separate thread to not block the download loop
+                    def run_async_upload():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            result = loop.run_until_complete(tolino_uploader.upload_book_to_tolino(download_path))
+                            if result:
+                                logger.info(f"Book {book_id} successfully uploaded to Tolino")
+                            else:
+                                logger.error(f"Failed to upload book {book_id} to Tolino")
+                        except Exception as e:
+                            logger.error_trace(f"Error uploading book {book_id} to Tolino: {e}")
+                        finally:
+                            loop.close()
+                    
+                    import threading
+                    upload_thread = threading.Thread(target=run_async_upload)
+                    upload_thread.daemon = True
+                    upload_thread.start()
 
             new_status = (
                 QueueStatus.AVAILABLE if download_path else QueueStatus.ERROR

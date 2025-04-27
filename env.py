@@ -22,8 +22,14 @@ _SUPPORTED_FORMATS = os.getenv("SUPPORTED_FORMATS", "epub,mobi,azw3,fb2,djvu,cbz
 _BOOK_LANGUAGE = os.getenv("BOOK_LANGUAGE", "en").lower()
 _CUSTOM_SCRIPT = os.getenv("CUSTOM_SCRIPT", "").strip()
 FLASK_HOST = os.getenv("FLASK_HOST", "0.0.0.0")
-FLASK_PORT = int(os.getenv("FLASK_PORT", "8084"))
+FLASK_PORT = int(os.getenv("FLASK_PORT", "12000"))
 DEBUG = string_to_bool(os.getenv("DEBUG", "False"))
+
+# Tolino integration settings
+ENABLE_TOLINO = string_to_bool(os.getenv("ENABLE_TOLINO", "True"))
+TOLINO_CREDENTIALS_FILE = Path(os.getenv("TOLINO_CREDENTIALS_FILE", str(TMP_DIR / "tolino_credentials.enc")))
+TOLINO_ENCRYPTION_KEY = os.getenv("TOLINO_ENCRYPTION_KEY", "tolino-integration-secret-key")
+TOLINO_WEBSHOP = os.getenv("TOLINO_WEBSHOP", "hugendubel")
 # If debug is true, we want to log everything
 if DEBUG:
     LOG_LEVEL = "DEBUG"
@@ -38,6 +44,11 @@ BYPASS_RELEASE_INACTIVE_MIN = int(os.getenv("BYPASS_RELEASE_INACTIVE_MIN", "5"))
 APP_ENV = os.getenv("APP_ENV", "prod").lower()
 # Logging settings
 LOG_FILE = LOG_DIR / "cwa-bookd-downloader.log"
+
+# Tolino settings
+TOLINO_CREDENTIALS_FILE = Path(os.getenv("TOLINO_CREDENTIALS_FILE", str(TMP_DIR / "tolino_credentials.enc")))
+ENCRYPTION_KEY_FILE = Path(os.getenv("ENCRYPTION_KEY_FILE", str(TMP_DIR / "encryption_key.bin")))
+ENABLE_TOLINO = string_to_bool(os.getenv("ENABLE_TOLINO", "true"))
 
 USING_TOR = string_to_bool(os.getenv("USING_TOR", "false"))
 # If using Tor, we don't need to set custom DNS, use DOH, or proxy

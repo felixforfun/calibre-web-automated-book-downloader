@@ -28,6 +28,7 @@ class BookInfo:
     language: Optional[str] = None
     format: Optional[str] = None
     size: Optional[str] = None
+    upload_to_tolino: bool = False
     info: Optional[Dict[str, List[str]]] = None
     download_urls: List[str] = field(default_factory=list)
     download_path: Optional[str] = None
