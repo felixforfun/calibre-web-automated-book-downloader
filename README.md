@@ -12,13 +12,44 @@ This application allows you to search for books from various sources (primarily 
 
 ## Installation
 
-### Prerequisites
+### Option 1: Docker (Recommended)
+
+The easiest way to run the application is using Docker and Docker Compose:
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/felixforfun/calibre-web-automated-book-downloader.git
+   cd calibre-web-automated-book-downloader
+   ```
+
+2. Create the necessary directories:
+   ```bash
+   mkdir -p /tmp/data/calibre-web/{ingest,tmp,logs}
+   ```
+
+3. Start the application using Docker Compose:
+
+   **Standard setup (with Tor support):**
+   ```bash
+   docker-compose up -d
+   ```
+
+   **Simplified setup (faster build):**
+   ```bash
+   docker-compose -f docker-compose-simple.yml up -d
+   ```
+
+4. Access the application at http://localhost:8084
+
+### Option 2: Manual Installation
+
+#### Prerequisites
 
 - Python 3.8 or higher
 - Playwright for browser automation
 - Cryptography for secure credential storage
 
-### Setup
+#### Setup
 
 1. Clone the repository:
    ```bash
@@ -86,12 +117,37 @@ Your Tolino credentials are securely stored using encryption and are only used f
 
 ## Environment Variables
 
+### General Settings
+
 | Variable | Description | Default |
 |----------|-------------|---------|
-| ENABLE_TOLINO | Enable or disable Tolino integration | True |
-| TOLINO_WEBSHOP | Tolino webshop to use | hugendubel |
+| FLASK_PORT | Port for the web interface | 8084 |
+| LOG_LEVEL | Logging level (info, debug, warning, error) | info |
+| BOOK_LANGUAGE | Default language for book search | en |
+| USE_BOOK_TITLE | Use book title for filename | true |
+| TZ | Timezone | UTC |
+| APP_ENV | Application environment (prod, dev) | prod |
+| UID | User ID to run the application | 1000 |
+| GID | Group ID to run the application | 100 |
+
+### Tolino Integration Settings
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| ENABLE_TOLINO | Enable or disable Tolino integration | true |
+| TOLINO_WEBSHOP | Tolino webshop to use (hugendubel, thalia, weltbild, buecher, osiander, mayersche) | hugendubel |
 | TOLINO_CREDENTIALS_FILE | Path to store encrypted credentials | /tmp/cwa-book-downloader/tolino_credentials.enc |
 | TOLINO_ENCRYPTION_KEY | Key for encrypting credentials | tolino-integration-secret-key |
+
+### Docker Volumes
+
+When using Docker, you should mount the following volumes:
+
+| Volume | Description |
+|--------|-------------|
+| /cwa-book-ingest | Directory where downloaded books will be stored |
+| /tmp/cwa-book-downloader | Directory for temporary files and Tolino credentials |
+| /var/log/cwa-book-downloader | Directory for log files |
 
 ## Security Considerations
 

@@ -1,6 +1,13 @@
+version: '3.8'
+
 services:
   calibre-web-automated-book-downloader:
-    image: ghcr.io/calibrain/calibre-web-automated-book-downloader:latest
+    build:
+      context: .
+      target: cwa-bd
+    # Alternatively, use the pre-built image:
+    # image: ghcr.io/felixforfun/calibre-web-automated-book-downloader:latest
+    container_name: calibre-web-automated-book-downloader
     environment:
       FLASK_PORT: 8084
       LOG_LEVEL: info
@@ -10,10 +17,62 @@ services:
       APP_ENV: prod
       UID: 1000
       GID: 100
+      # Tolino integration settings
+      ENABLE_TOLINO: "true"
+      TOLINO_WEBSHOP: "hugendubel"
+      TOLINO_CREDENTIALS_FILE: "/tmp/cwa-book-downloader/tolino_credentials.enc"
+      TOLINO_ENCRYPTION_KEY: "tolino-integration-secret-key"
     ports:
       - 8084:8084
     restart: unless-stopped
     volumes:
-    # This is where the books will be downloaded to, usually it would be 
-    # the same as whatever you gave in "calibre-web-automated"
+      # This is where the books will be downloaded to, usually it would be 
+      # the same as whatever you gave in "calibre-web-automated"
       - /tmp/data/calibre-web/ingest:/cwa-book-ingest
+      # For Tolino credentials and temporary files
+      - /tmp/data/calibre-web/tmp:/tmp/cwa-book-downloader
+      # For logs
+      - /tmp/data/calibre-web/logs:/var/log/cwa-book-downloader
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/request/api/status"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional Tor service for anonymous browsing
+  calibre-web-automated-book-downloader-tor:
+    build:
+      context: .
+      target: cwa-bd-tor
+    # Alternatively, use the pre-built image:
+    # image: ghcr.io/felixforfun/calibre-web-automated-book-downloader:tor
+    container_name: calibre-web-automated-book-downloader-tor
+    environment:
+      FLASK_PORT: 8085
+      LOG_LEVEL: info
+      BOOK_LANGUAGE: en
+      USE_BOOK_TITLE: true
+      TZ: America/New_York
+      APP_ENV: prod
+      UID: 1000
+      GID: 100
+      USING_TOR: "true"
+      # Tolino integration settings
+      ENABLE_TOLINO: "true"
+      TOLINO_WEBSHOP: "hugendubel"
+      TOLINO_CREDENTIALS_FILE: "/tmp/cwa-book-downloader/tolino_credentials.enc"
+      TOLINO_ENCRYPTION_KEY: "tolino-integration-secret-key"
+    ports:
+      - 8085:8085
+    restart: unless-stopped
+    volumes:
+      - /tmp/data/calibre-web-tor/ingest:/cwa-book-ingest
+      - /tmp/data/calibre-web-tor/tmp:/tmp/cwa-book-downloader
+      - /tmp/data/calibre-web-tor/logs:/var/log/cwa-book-downloader
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8085/request/api/status"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

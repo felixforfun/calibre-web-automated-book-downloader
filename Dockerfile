@@ -23,7 +23,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=en_US.UTF-8 \
     LANGUAGE=en_US:en \
     LC_ALL=en_US.UTF-8 \
-    APP_ENV=prod
+    APP_ENV=prod \
+    # Tolino integration settings
+    ENABLE_TOLINO=true \
+    TOLINO_WEBSHOP=hugendubel \
+    TOLINO_CREDENTIALS_FILE=/tmp/cwa-book-downloader/tolino_credentials.enc \
+    TOLINO_ENCRYPTION_KEY=tolino-integration-secret-key
 
 # Set ARG for build-time expansion (FLASK_PORT), ENV for runtime access
 ENV FLASK_PORT=8084
@@ -47,7 +52,27 @@ RUN apt-get update && \
     # --- Chromium Browser ---
     chromium-driver \
     # For tkinter (pyautogui)
-    python3-tk && \
+    python3-tk \
+    # For Playwright
+    libxcursor1 \
+    libgtk-3-0 \
+    libnss3 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libasound2 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libpango-1.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libwayland-client0 \
+    libwayland-cursor0 \
+    libwayland-egl1 \
+    libxshmfence1 && \
     # Cleanup APT cache *after* all installs in this layer
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false && \
     apt-get clean && \
@@ -68,6 +93,8 @@ WORKDIR /app
 # Copying requirements.txt separately leverages build cache
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
+    # Install Playwright browsers
+    playwright install chromium && \
     # Clean root's pip cache
     rm -rf /root/.cache
 
@@ -88,7 +115,7 @@ COPY . .
 # Final setup: permissions and directories in one layer
 # Only creating directories and setting executable bits.
 # Ownership will be handled by the entrypoint script.
-RUN mkdir -p /var/log/cwa-book-downloader /cwa-book-ingest && \
+RUN mkdir -p /var/log/cwa-book-downloader /cwa-book-ingest /tmp/cwa-book-downloader && \
     chmod +x /app/entrypoint.sh /app/tor.sh /app/genDebug.sh
 
 # Expose the application port
