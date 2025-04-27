@@ -28,8 +28,15 @@ The easiest way to run the application is using Docker and Docker Compose:
    ```
 
 3. Start the application using Docker Compose:
+
+   **Standard setup (with Tor support):**
    ```bash
    docker-compose up -d
+   ```
+
+   **Simplified setup (faster build):**
+   ```bash
+   docker-compose -f docker-compose-simple.yml up -d
    ```
 
 4. Access the application at http://localhost:8084

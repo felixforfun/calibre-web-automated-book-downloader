@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  calibre-web-automated-book-downloader:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple
+    container_name: calibre-web-automated-book-downloader
+    environment:
+      FLASK_PORT: 8084
+      LOG_LEVEL: info
+      BOOK_LANGUAGE: en
+      USE_BOOK_TITLE: true
+      TZ: America/New_York
+      APP_ENV: prod
+      UID: 1000
+      GID: 100
+      # Tolino integration settings
+      ENABLE_TOLINO: "true"
+      TOLINO_WEBSHOP: "hugendubel"
+      TOLINO_CREDENTIALS_FILE: "/tmp/cwa-book-downloader/tolino_credentials.enc"
+      TOLINO_ENCRYPTION_KEY: "tolino-integration-secret-key"
+    ports:
+      - 8084:8084
+    restart: unless-stopped
+    volumes:
+      # This is where the books will be downloaded to, usually it would be 
+      # the same as whatever you gave in "calibre-web-automated"
+      - /tmp/data/calibre-web/ingest:/cwa-book-ingest
+      # For Tolino credentials and temporary files
+      - /tmp/data/calibre-web/tmp:/tmp/cwa-book-downloader
+      # For logs
+      - /tmp/data/calibre-web/logs:/var/log/cwa-book-downloader
