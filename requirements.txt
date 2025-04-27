@@ -9,3 +9,5 @@ seleniumbase
 gunicorn
 python-xlib
 psutil
+playwright
+cryptography

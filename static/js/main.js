@@ -49,7 +49,10 @@ document.addEventListener('DOMContentLoaded', () => {
         search: '/request/api/search',
         info: '/request/api/info',
         download: '/request/api/download',
-        status: '/request/api/status'
+        status: '/request/api/status',
+        tolinoUpload: '/request/api/tolino/upload',
+        tolinoCredentials: '/request/api/tolino/credentials',
+        tolinoStatus: '/request/api/tolino/status'
     };
     const FILTERS = ['isbn', 'author', 'title', 'lang' , 'sort', "content"];
 
@@ -377,8 +380,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 className: 'uk-button uk-button-primary uk-align-center uk-margin-small uk-width-1-1',
                 onclick: () => bookDetails.downloadBook(book)
             }, [utils.createElement('span', { textContent: 'Download' })]);
+            
+            const tolinoButton = utils.createElement('button', {
+                className: 'uk-button uk-button-secondary uk-align-center uk-margin-small uk-width-1-1',
+                onclick: () => tolino.uploadBook(book.id)
+            }, [utils.createElement('span', { textContent: 'Upload to Tolino' })]);
 
-            return utils.createElement('td', {}, [buttonDetails, downloadButton]);
+            return utils.createElement('td', {}, [buttonDetails, downloadButton, tolinoButton]);
         },
 
         handleSearchError(error) {
@@ -817,11 +825,178 @@ document.addEventListener('DOMContentLoaded', () => {
 
     }
 
+    // Tolino functionality
+    const tolino = {
+        hasCredentials: false,
+        
+        init() {
+            // Check if Tolino is enabled
+            this.checkStatus();
+            
+            // Add event listener for settings button
+            const settingsButton = document.getElementById('tolino-settings-button');
+            if (settingsButton) {
+                settingsButton.addEventListener('click', () => this.showSettings());
+            }
+        },
+        
+        async checkStatus() {
+            try {
+                const response = await utils.fetchJson(API_ENDPOINTS.tolinoStatus);
+                if (response.enabled) {
+                    // Tolino is enabled
+                    this.hasCredentials = response.has_credentials;
+                    
+                    // Show or hide the settings button based on credentials
+                    const settingsButton = document.getElementById('tolino-settings-button');
+                    if (settingsButton) {
+                        settingsButton.classList.remove('uk-hidden');
+                        
+                        // Update the button text based on credentials status
+                        const buttonText = document.getElementById('tolino-settings-text');
+                        if (buttonText) {
+                            buttonText.textContent = this.hasCredentials ? 
+                                'Tolino Settings' : 'Set Tolino Credentials';
+                        }
+                    }
+                } else {
+                    // Tolino is disabled, hide the settings button
+                    const settingsButton = document.getElementById('tolino-settings-button');
+                    if (settingsButton) {
+                        settingsButton.classList.add('uk-hidden');
+                    }
+                }
+            } catch (error) {
+                console.error('Error checking Tolino status:', error);
+            }
+        },
+        
+        showSettings() {
+            // Create modal for Tolino settings
+            const modalContent = `
+                <div class="uk-modal-dialog uk-modal-body">
+                    <h2 class="uk-modal-title">Tolino Settings</h2>
+                    <form id="tolino-credentials-form" class="uk-form-stacked">
+                        <div class="uk-margin">
+                            <label class="uk-form-label" for="tolino-username">Email/Username</label>
+                            <div class="uk-form-controls">
+                                <input class="uk-input" id="tolino-username" type="email" placeholder="Your Tolino account email" required>
+                            </div>
+                        </div>
+                        <div class="uk-margin">
+                            <label class="uk-form-label" for="tolino-password">Password</label>
+                            <div class="uk-form-controls">
+                                <input class="uk-input" id="tolino-password" type="password" placeholder="Your Tolino account password" required>
+                            </div>
+                        </div>
+                        <div class="uk-margin" id="tolino-credentials-message"></div>
+                        <div class="uk-modal-footer uk-text-right">
+                            <button class="uk-button uk-button-default uk-modal-close" type="button">Cancel</button>
+                            <button class="uk-button uk-button-primary" type="submit">Save Credentials</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            
+            // Create and show the modal
+            const modal = document.createElement('div');
+            modal.id = 'tolino-settings-modal';
+            modal.setAttribute('uk-modal', '');
+            modal.innerHTML = modalContent;
+            document.body.appendChild(modal);
+            
+            // Show the modal
+            UIkit.modal(modal).show();
+            
+            // Add event listener for form submission
+            const form = document.getElementById('tolino-credentials-form');
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const username = document.getElementById('tolino-username').value;
+                const password = document.getElementById('tolino-password').value;
+                
+                try {
+                    const response = await fetch(API_ENDPOINTS.tolinoCredentials, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ username, password })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    const messageElement = document.getElementById('tolino-credentials-message');
+                    if (response.ok) {
+                        messageElement.innerHTML = '<div class="uk-alert uk-alert-success">Credentials saved successfully!</div>';
+                        this.hasCredentials = true;
+                        
+                        // Update the button text
+                        const buttonText = document.getElementById('tolino-settings-text');
+                        if (buttonText) {
+                            buttonText.textContent = 'Tolino Settings';
+                        }
+                        
+                        // Close the modal after a delay
+                        setTimeout(() => {
+                            UIkit.modal(modal).hide();
+                            document.body.removeChild(modal);
+                        }, 2000);
+                    } else {
+                        messageElement.innerHTML = `<div class="uk-alert uk-alert-danger">Error: ${data.error}</div>`;
+                    }
+                } catch (error) {
+                    console.error('Error saving Tolino credentials:', error);
+                    const messageElement = document.getElementById('tolino-credentials-message');
+                    messageElement.innerHTML = '<div class="uk-alert uk-alert-danger">Error saving credentials. Please try again.</div>';
+                }
+            });
+        },
+        
+        async uploadBook(bookId) {
+            if (!this.hasCredentials) {
+                // Show credentials form if not set
+                this.showSettings();
+                return;
+            }
+            
+            try {
+                utils.showLoading(elements.searchLoading);
+                const response = await utils.fetchJson(
+                    `${API_ENDPOINTS.tolinoUpload}?id=${encodeURIComponent(bookId)}`
+                );
+                
+                // Show notification
+                UIkit.notification({
+                    message: response.message || 'Book upload to Tolino started',
+                    status: 'success',
+                    pos: 'top-center',
+                    timeout: 5000
+                });
+                
+                // Refresh status
+                status.fetch();
+            } catch (error) {
+                console.error('Tolino upload error:', error);
+                UIkit.notification({
+                    message: error.message || 'Error uploading to Tolino',
+                    status: 'danger',
+                    pos: 'top-center',
+                    timeout: 5000
+                });
+            } finally {
+                utils.hideLoading(elements.searchLoading);
+            }
+        }
+    };
+
     // Initialize
     function init() {
         setupEventListeners();
         theme.init();  // Initialize theme management
         debug.init();  // Initialize debug functionality
+        tolino.init(); // Initialize Tolino functionality
         status.fetch();
         setInterval(() => status.fetch(), REFRESH_INTERVAL);
     }
